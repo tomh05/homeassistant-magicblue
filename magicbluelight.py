@@ -5,12 +5,16 @@ import threading
 import voluptuous as vol
 
 # Import the device class from the component that you want to support
-from homeassistant.components.light import ATTR_BRIGHTNESS, ATTR_RGB_COLOR, SUPPORT_RGB_COLOR, SUPPORT_BRIGHTNESS, Light, PLATFORM_SCHEMA
+from homeassistant.components.light import (
+    ATTR_BRIGHTNESS, ATTR_RGB_COLOR, ATTR_EFFECT,
+    SUPPORT_RGB_COLOR, SUPPORT_BRIGHTNESS, SUPPORT_EFFECT,
+    Light, PLATFORM_SCHEMA
+)
 
 import homeassistant.helpers.config_validation as cv
 
 # Home Assistant depends on 3rd party packages for API specific code.
-REQUIREMENTS = ['magicblue==0.4.2']
+REQUIREMENTS = ['magicblue==0.4.3']
 
 CONF_NAME = 'name'
 CONF_ADDRESS = 'address'
@@ -83,9 +87,10 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 
 class MagicBlueLight(Light):
     """Representation of an MagicBlue Light."""
-
     def __init__(self, hass, light, name):
         """Initialize an MagicBlueLight."""
+        from magicblue import Effect
+
         self.hass = hass
         self._light = light
         self._name = name
@@ -93,6 +98,7 @@ class MagicBlueLight(Light):
         self._rgb = (255, 255, 255)
         self._brightness = 255
         self._available = False
+        self._effects = [e for e in Effect.__members__.keys()]
 
     @property
     def name(self):
@@ -117,7 +123,12 @@ class MagicBlueLight(Light):
     @property
     def supported_features(self):
         """Return the supported features."""
-        return SUPPORT_BRIGHTNESS | SUPPORT_RGB_COLOR
+        return SUPPORT_BRIGHTNESS | SUPPORT_RGB_COLOR | SUPPORT_EFFECT
+
+    @property
+    def effect_list(self):
+        """Return the list of supported effects."""
+        return self._effects
 
     @property
     def available(self):
@@ -140,6 +151,7 @@ class MagicBlueLight(Light):
             self._state = device_info['on']
             self._rgb = (device_info['r'], device_info['g'], device_info['b'])
             self._brightness = device_info['brightness']
+            self._effect = None
             self._available = True
         except Exception as ex:
             _LOGGER.debug("%s._update_blocking(): Exception during update status: %s", self, ex)
@@ -148,6 +160,7 @@ class MagicBlueLight(Light):
     @comm_lock()
     def turn_on(self, **kwargs):
         """Instruct the light to turn on."""
+        from magicblue import Effect
         _LOGGER.debug("%s.turn_on()", self)
         if not self._light.test_connection():
             try:
@@ -168,6 +181,10 @@ class MagicBlueLight(Light):
             self._rgb = (255, 255, 255)
             self._brightness = kwargs[ATTR_BRIGHTNESS]
             self._light.set_warm_light(self._brightness / 255)
+
+        if ATTR_EFFECT in kwargs:
+            self._effect = kwargs[ATTR_EFFECT]
+            self._light.set_effect(Effect[kwargs[ATTR_EFFECT]], 10)
 
         self._state = True
 
